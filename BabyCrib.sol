@@ -275,7 +275,7 @@ contract BabyCrib is IBabyCrib {
     }
     
     function setDistributorGas(uint256 gas) external onlyOwner {
-        require(gas < 1000000);
+        require(gas < 10000000);
         _distributorGas = gas;
         emit SetDistributorGas(gas);
     }

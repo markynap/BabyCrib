@@ -37,8 +37,8 @@ contract BabyCrib is IBabyCrib {
     }
     
     // Addresses
-    address public _marketingAddress = 0xE0A243eb9169256936C505a162478f5988A6fb85; // Marketing address used to pay for marketing
-    address public constant _burnAddress = 0x000000000000000000000000000000000000dEaD;
+    address public constant _burnWallet = 0x000000000000000000000000000000000000dEaD;
+    address public _marketing = 0xE0A243eb9169256936C505a162478f5988A6fb85;
     
     // BabySwap Router
     address private _dexRouter = 0x325E343f1dE602396E256B67eFd1F61C3A6B38Bd;
@@ -75,7 +75,7 @@ contract BabyCrib is IBabyCrib {
 
     // Token Limits
     uint256 public _maxTxAmount        = _tTotal.div(100);  // 10 million
-    uint256 public _tokenSwapThreshold = _tTotal.div(200); // 5 million
+    uint256 public _tokenSwapThreshold = _tTotal.div(200);  // 5 million
     
     // gas for distributor
     IDistributor _distributor;
@@ -87,10 +87,7 @@ contract BabyCrib is IBabyCrib {
         require(msg.sender == _owner); _;
     }
     
-    // Events
-    event SwappedBack(uint256 swapAmount);
-    event FeesDistributed(uint256 burnPortion, uint256 reflectPortion, uint256 distributorPortion);
-    
+    // initalize BabyCrib
     constructor (address distributor) {
         
         // Initalize Router
@@ -105,12 +102,12 @@ contract BabyCrib is IBabyCrib {
 
         // dividend + reward exclusions
         _excludeFromReward(address(this));
-        _excludeFromReward(_burnAddress);
+        _excludeFromReward(_burnWallet);
         _excludeFromReward(_pair);
         
         // fee exclusions 
         _isExcludedFromFees[address(this)] = true;
-        _isExcludedFromFees[_burnAddress] = true;
+        _isExcludedFromFees[_burnWallet] = true;
         _isExcludedFromFees[msg.sender] = true;
         
         // tx limit exclusions
@@ -143,6 +140,7 @@ contract BabyCrib is IBabyCrib {
      */
     function transferOwnership(address newOwner) external onlyOwner {
         _owner = newOwner;  
+        emit TransferOwnership(newOwner);
     }
     
     /**
@@ -151,6 +149,7 @@ contract BabyCrib is IBabyCrib {
     function withdrawBNB(uint256 amount) external onlyOwner {
         (bool s,) = payable(msg.sender).call{value: amount}("");
         require(s, 'Failure on BNB Withdraw');
+        emit OwnerWithdraw(_router.WETH(), amount);
     }
     
     /**
@@ -162,6 +161,7 @@ contract BabyCrib is IBabyCrib {
         if (bal > 0) {
             IERC20(token).transfer(msg.sender, bal);
         }
+        emit OwnerWithdraw(token, bal);
     }
     
     /**
@@ -170,51 +170,61 @@ contract BabyCrib is IBabyCrib {
     function setRouterAddress(address router) external onlyOwner {
         require(router != address(0));
         _router = IUniswapV2Router02(router);
+        emit UpdatedRouterAddress(router);
     }
     
     function setPairAddress(address newPair) external onlyOwner {
         require(newPair != address(0));
         _pair = newPair;
         isLiquidityPool[newPair] = true;
+        emit UpdatedPairAddress(newPair);
     }
     
     function setIsLiquidityPool(address pool, bool isPool) external onlyOwner {
         isLiquidityPool[pool] = isPool;
+        emit SetIsLiquidityPool(pool, isPool);
     }
     
      /**
      * @notice Excludes an address from receiving reflections
      */
-    function ExcludeFromRewards(address account) external onlyOwner {
+    function excludeFromRewards(address account) external onlyOwner {
         require(account != address(this) && account != _pair);
         
         _excludeFromReward(account);
         _distributor.setShare(account, 0);
+        emit ExcludeFromRewards(account);
     }
     
     function setFeeExemption(address account, bool feeExempt) external onlyOwner {
         _isExcludedFromFees[account] = feeExempt;
+        emit SetFeeExemption(account, feeExempt);
     }
     
     function setTxLimitExempt(address account, bool isExempt) external onlyOwner {
         _isTxLimitExempt[account] = isExempt;
+        emit SetTxLimitFeeExemption(account, isExempt);
     }
 
     function setMaxTxAmount(uint256 maxTxAmount) external onlyOwner {
         _maxTxAmount = maxTxAmount;
+        emit SetMaxTxAmount(maxTxAmount);
     }
     
     function upgradeDistributor(address newDistributor) external onlyOwner {
         require(newDistributor != address(0));
         _distributor = IDistributor(newDistributor);
+        emit UpgradedDistributor(newDistributor); 
     }
     
     function setTokenSwapThreshold(uint256 tokenSwapThreshold) external onlyOwner {
         _tokenSwapThreshold = tokenSwapThreshold;
+        emit SetTokenSwapThreshold(tokenSwapThreshold);
     }
     
     function setMarketingAddress(address marketingAddress) external onlyOwner {
-        _marketingAddress = marketingAddress;
+        _marketing = marketingAddress;
+        emit SetMarketingAddress(marketingAddress);
     }
     
     /** Sets Various Fees */
@@ -230,6 +240,7 @@ contract BabyCrib is IBabyCrib {
         require(buyFee < 50);
         require(transferFee < 50);
         require(marketingFee < 5);
+        emit SetFees(burnFee, reflectFee, reflectbabyFee, marketingFee, buyFee, transferFee);
     }
     
     /**
@@ -260,11 +271,13 @@ contract BabyCrib is IBabyCrib {
             }
         }
         _distributor.setShare(account, balanceOf(account));
+        emit IncludeInRewards(account);
     }
     
     function setDistributorGas(uint256 gas) external onlyOwner {
         require(gas < 1000000);
         _distributorGas = gas;
+        emit SetDistributorGas(gas);
     }
     
     
@@ -524,7 +537,7 @@ contract BabyCrib is IBabyCrib {
      * @notice Burns CRIB tokens straight to the burn address
      */
     function _burnTokens(address sender, uint256 tFee) private {
-        _sendTokens(sender, _burnAddress, tFee);
+        _sendTokens(sender, _burnWallet, tFee);
     }
     
     /**
@@ -576,7 +589,7 @@ contract BabyCrib is IBabyCrib {
         uint256 marketingAmount = tokenAmount.mul(_marketingFee).div(10**2);
 
         // allocate tokens to marketing
-        _sendTokens(address(this), _marketingAddress, marketingAmount);
+        _sendTokens(address(this), _marketing, marketingAmount);
         
         // update token amount
         uint256 swapAmount = tokenAmount.sub(marketingAmount);
@@ -611,7 +624,29 @@ contract BabyCrib is IBabyCrib {
         );
     }
     
-    // to receive bnb
-    receive() external payable {}
+    receive() external payable {}  // to receive bnb
+    
+    
+    ////////////////////////////////////////////
+    ////////          EVENTS           /////////
+    ////////////////////////////////////////////
+    
+    event SwappedBack(uint256 swapAmount);
+    event FeesDistributed(uint256 burnPortion, uint256 reflectPortion, uint256 distributorPortion);
+    event TransferOwnership(address newOwner);
+    event OwnerWithdraw(address token, uint256 amount);
+    event UpdatedRouterAddress(address newRouter);
+    event UpdatedPairAddress(address newPair);
+    event SetIsLiquidityPool(address pool, bool isPool);
+    event ExcludeFromRewards(address account);
+    event SetFeeExemption(address account, bool feeExempt);
+    event SetTxLimitFeeExemption(address account, bool txLimitExempt);
+    event SetMaxTxAmount(uint256 newAmount);
+    event UpgradedDistributor(address newDistributor); 
+    event SetTokenSwapThreshold(uint256 tokenSwapThreshold);
+    event SetMarketingAddress(address marketingAddress);
+    event SetFees(uint256 burnFee, uint256 reflectFee, uint256 reflectbabyFee, uint256 marketingFee, uint256 buyFee, uint256 transferFee);
+    event IncludeInRewards(address account);
+    event SetDistributorGas(uint256 gas);
     
 }

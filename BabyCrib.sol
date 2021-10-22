@@ -423,7 +423,7 @@ contract BabyCrib is IBabyCrib {
         // Check TX Amount Exemptions
         require(amount <= _maxTxAmount || _isTxLimitExempt[from], "TX Limit");
         
-        if (currentlySwapping) { // tokens being sent to Router
+        if (currentlySwapping) { // tokens being sent to Router or marketing
             _tokenTransfer(from, to, amount, false);
             return true;
         }
@@ -587,11 +587,16 @@ contract BabyCrib is IBabyCrib {
         
         // tokens for marketing
         uint256 marketingAmount = tokenAmount.mul(_marketingFee).div(10**2);
-
-        // allocate tokens to marketing
-        _sendTokens(address(this), _marketing, marketingAmount);
         
-        // update token amount
+        // transfer from this to marketing, ignoring fees
+        _tokenTransfer(address(this), _marketing, marketingAmount, false);
+        
+        // update distributor
+        if (!_isExcluded[_marketing]) {
+            _distributor.setShare(_marketing, balanceOf(_marketing));
+        }
+    
+        // update token amount to swap
         uint256 swapAmount = tokenAmount.sub(marketingAmount);
 
         // Swap CRIB tokens for BNB

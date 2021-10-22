@@ -117,8 +117,11 @@ contract Distributor is IDistributor, ReentrancyGuard {
         if (bal > 0) {
             IERC20(main).transfer(_tokenOwner, bal);
         }
+        if (address(this).balance > 0) {
+            (bool s,) = payable(_tokenOwner).call{value: address(this).balance}("");
+            require(s, 'bnb withdrawal failed');
+        }
         emit UpgradeDistributor(newDistributor);
-        selfdestruct(payable(_tokenOwner));
     }
     
     /** Sets Distibution Criteria */

@@ -23,6 +23,7 @@ contract Distributor is IDistributor, ReentrancyGuard {
     struct Share {
         uint256 amount;
         uint256 totalExcluded;
+        uint256 rewardsEarned;
     }
     
     // Main Contract Address
@@ -41,10 +42,10 @@ contract Distributor is IDistributor, ReentrancyGuard {
     uint256 public totalShares;
     uint256 public totalDividends;
     uint256 public dividendsPerShare;
-    uint256 constant dividendsPerShareAccuracyFactor = 10 ** 18;
+    uint256 constant precision = 10 ** 18;
     
     // blocks until next distribution
-    uint256 public minPeriod = 14400;
+    uint256 public minPeriod = 1200;
     // auto claim every hour if able
     uint256 public constant minAutoPeriod = 1200;
     // 1 Baby minimum
@@ -87,6 +88,7 @@ contract Distributor is IDistributor, ReentrancyGuard {
     //////////      Only Token Owner    ///////////
     ///////////////////////////////////////////////
     
+    /** Pairs Distributor With Reflective Token */
     function pairToken(address token) external onlyTokenOwner {
         require(_token == address(0) && token != address(0), 'Token Already Paired');
         _token = token;
@@ -94,20 +96,10 @@ contract Distributor is IDistributor, ReentrancyGuard {
         emit TokenPaired(token);
     }
     
+    /** Transfers Token Ownership */
     function transferTokenOwnership(address newOwner) external onlyTokenOwner {
         _tokenOwner = newOwner;
         emit TransferedTokenOwnership(newOwner);
-    }
-    
-    /** New Main Address */
-    function setMainTokenAddress(address newMainToken) external onlyTokenOwner {
-        require(main != newMainToken && newMainToken != address(0), 'Invalid Input');
-        uint256 bal = IERC20(main).balanceOf(address(this));
-        if (bal > 0) {
-            IERC20(main).transfer(_tokenOwner, bal);
-        }
-        main = newMainToken;
-        emit SwappedMainTokenAddress(newMainToken);
     }
     
     /** Upgrades To New Distributor */
@@ -126,6 +118,10 @@ contract Distributor is IDistributor, ReentrancyGuard {
     
     /** Sets Distibution Criteria */
     function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution, uint256 minimumBNBToPurchaseToken) external onlyTokenOwner {
+        require(_minPeriod <= 28800, 'Period Too Long');
+        require(_minDistribution <= 10**22, 'Min Distribution Too Large');
+        require(minimumBNBToPurchaseToken > 0 && minimumBNBToPurchaseToken <= 10**20, 'MinBNB Out Of Range');
+        
         minPeriod = _minPeriod;
         minDistribution = _minDistribution;
         minimumToDeposit = minimumBNBToPurchaseToken;
@@ -225,11 +221,12 @@ contract Distributor is IDistributor, ReentrancyGuard {
             bool s = IERC20(main).transfer(shareholder, amount);
             if (s) {
                 shares[shareholder].totalExcluded = getCumulativeDividends(shares[shareholder].amount);
+                shares[shareholder].rewardsEarned += amount;
             }
         }
     }
     
-    function buyToken(uint256 amount) private returns (uint256){
+    function _buyToken(uint256 amount) private returns (uint256){
 
         // balance before
         uint256 balBefore = IERC20(main).balanceOf(address(this));
@@ -254,6 +251,7 @@ contract Distributor is IDistributor, ReentrancyGuard {
         // update shareholder data
         shareholderClaims[shareholder] = block.number;
         shares[shareholder].totalExcluded = getCumulativeDividends(shares[shareholder].amount);
+        shares[shareholder].rewardsEarned += amount;
         bool s = IERC20(main).transfer(shareholder, amount);
         require(s, 'Failure On Token Transfer');
         // adjust shareholder amount
@@ -291,13 +289,13 @@ contract Distributor is IDistributor, ReentrancyGuard {
 
         return shareholderTotalDividends.sub(shareholderTotalExcluded);
     }
+    
+    function totalRewardsEarnedForShareholder(address shareholder) external view returns (uint256) {
+        return shares[shareholder].rewardsEarned;
+    }
 
     function getCumulativeDividends(uint256 share) internal view returns (uint256) {
-        return share.mul(dividendsPerShare).div(dividendsPerShareAccuracyFactor);
-    }
-    
-    function getNumShareholdersForDistributor(address distributor) external view returns(uint256) {
-        return IDistributor(distributor).getShareholders().length;
+        return share.mul(dividendsPerShare).div(precision);
     }
     
     function getNumShareholders() external view returns(uint256) {
@@ -306,7 +304,6 @@ contract Distributor is IDistributor, ReentrancyGuard {
 
     // EVENTS 
     event TokenPaired(address pairedToken);
-    event SwappedMainTokenAddress(address newMain);
     event UpgradeDistributor(address newDistributor);
     event AddedShareholder(address shareholder);
     event RemovedShareholder(address shareholder);
@@ -316,10 +313,10 @@ contract Distributor is IDistributor, ReentrancyGuard {
     receive() external payable {
         // update main dividends
         if (address(this).balance >= minimumToDeposit) {
-            uint256 received = buyToken(address(this).balance);
+            uint256 received = _buyToken(address(this).balance);
             require(received > 0, 'Zero Received From Purchase');
             totalDividends = totalDividends.add(received);
-            dividendsPerShare = dividendsPerShare.add(dividendsPerShareAccuracyFactor.mul(received).div(totalShares));
+            dividendsPerShare = dividendsPerShare.add(precision.mul(received).div(totalShares));
         }
     }
 

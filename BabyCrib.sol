@@ -40,8 +40,7 @@ contract BabyCrib is IBabyCrib {
     address public constant _burnWallet = 0x000000000000000000000000000000000000dEaD;
     address public _marketing = 0xE0A243eb9169256936C505a162478f5988A6fb85;
     
-    // BabySwap Router
-    address private _dexRouter = 0x325E343f1dE602396E256B67eFd1F61C3A6B38Bd;
+    // BNB -> Main
     address[] path;
 
     // Balances
@@ -91,7 +90,7 @@ contract BabyCrib is IBabyCrib {
     constructor (address distributor) {
         
         // Initalize Router
-        _router = IUniswapV2Router02(_dexRouter);
+        _router = IUniswapV2Router02(0x325E343f1dE602396E256B67eFd1F61C3A6B38Bd);
         
         // Create Liquidity Pair
         _pair = IUniswapV2Factory(_router.factory())

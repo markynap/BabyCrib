@@ -164,7 +164,7 @@ contract BabyCrib is IBabyCrib {
     }
     
     /**
-     * @notice Allows the contract to change the router, in the instance when PancakeSwap upgrades making the contract future proof
+     * @notice Allows the contract to change the router, in the instance of BabySwap V2 making the contract future proof
      */
     function setRouterAddress(address router) external onlyOwner {
         require(router != address(0));
@@ -176,6 +176,8 @@ contract BabyCrib is IBabyCrib {
         require(newPair != address(0));
         _pair = newPair;
         isLiquidityPool[newPair] = true;
+        _excludeFromReward(newPair);
+        _distributor.setShare(newPair, 0);
         emit UpdatedPairAddress(newPair);
     }
     
@@ -217,11 +219,13 @@ contract BabyCrib is IBabyCrib {
     }
     
     function setTokenSwapThreshold(uint256 tokenSwapThreshold) external onlyOwner {
+        require(tokenSwapThreshold > 0);
         _tokenSwapThreshold = tokenSwapThreshold;
         emit SetTokenSwapThreshold(tokenSwapThreshold);
     }
     
     function setMarketingAddress(address marketingAddress) external onlyOwner {
+        require(marketingAddress != address(0));
         _marketing = marketingAddress;
         emit SetMarketingAddress(marketingAddress);
     }
